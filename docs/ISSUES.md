@@ -43,10 +43,10 @@ Known problems with this platform, with the cause and the fix. Infrastructure-si
 - **Cause:** the `frontend` container is plain `nginx:alpine` serving `./frontend/build`, which does not exist until you build the React app.
 - **Fix:** `npm --prefix frontend install && npm --prefix frontend run build`, then `docker compose up -d`.
 
-### `/api/users` fails under Compose
+### `/api/users` returned errors under Compose (fixed)
 
-- **Cause:** the gateway reads `USERS_SERVICE_URL`, but `docker-compose.yml` sets `USER_SERVICE_URL`. The gateway falls back to its default `http://localhost:3005`, which does not exist inside the container. (`ORDER_SERVICE_URL` and `PORT` in the same block are also not read; the gateway uses `ORDERS_SERVICE_URL` and `GATEWAY_PORT`.)
-- **Fix:** in the gateway `environment` list, use `USERS_SERVICE_URL=http://user-service:3006`. The Kubernetes manifest already does.
+- **Cause:** the gateway reads `USERS_SERVICE_URL`, but `docker-compose.yml` used to set `USER_SERVICE_URL`. The gateway fell back to its default `http://localhost:3005`, which does not exist inside the container.
+- **Fix:** the gateway `environment` list now sets `USERS_SERVICE_URL=http://user-service:3006`, matching the Kubernetes manifest. Lesson: environment variable names must match between the code, Compose and the manifests. `ORDER_SERVICE_URL` and `PORT` on the gateway are still not read; the gateway uses `ORDERS_SERVICE_URL` and `GATEWAY_PORT`.
 
 ### Database changes do not apply after editing `database/init/`
 

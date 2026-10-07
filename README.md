@@ -171,4 +171,4 @@ This is a learning project, not a production system.
 - The ServiceMonitor selects only the `gateway` Service, so in the cluster Prometheus scrapes the gateway only. Compose scrapes all services.
 - Demo credentials are committed (`postgres123` in `gitops/secrets.yml` and `docker-compose.yml`, Grafana `admin` / `admin`). Use a secrets manager for anything real.
 - CI authenticates to AWS with long-lived IAM access keys instead of GitHub OIDC.
-- `docker-compose.yml` sets `USER_SERVICE_URL`, `ORDER_SERVICE_URL` and `PORT` on the gateway, but the gateway reads `USERS_SERVICE_URL`, `ORDERS_SERVICE_URL` and `GATEWAY_PORT`. In Compose, `/api/users` therefore falls back to `http://localhost:3005` and fails. Fix: rename the variable to `USERS_SERVICE_URL` with value `http://user-service:3006`. The Kubernetes manifest already uses the right names.
+- In `docker-compose.yml` the gateway also gets `ORDER_SERVICE_URL` and `PORT`, which it does not read (it uses `ORDERS_SERVICE_URL` and `GATEWAY_PORT`). `PORT` is harmless because the default is the same 3001; `ORDER_SERVICE_URL` has no effect because `order-service` is not routed by the gateway.
