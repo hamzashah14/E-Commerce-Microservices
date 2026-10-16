@@ -78,11 +78,12 @@ metadata:
   namespace: ecommerce
   labels:
     app: gateway
+    monitoring: enabled
 spec:
   selector:
     app: gateway
   ports:
-    - name: http   
+    - name: http
       protocol: TCP
       port: 3001
       targetPort: 3001

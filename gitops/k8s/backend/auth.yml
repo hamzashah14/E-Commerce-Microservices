@@ -73,11 +73,15 @@ kind: Service
 metadata:
   name: auth
   namespace: ecommerce
+  labels:
+    app: auth
+    monitoring: enabled
 spec:
   selector:
     app: auth
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 3002
       targetPort: 3002
   type: ClusterIP

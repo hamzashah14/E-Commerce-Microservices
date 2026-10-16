@@ -9,9 +9,11 @@ spec:
   namespaceSelector:
     matchNames:
       - ecommerce
+  # Every backend Service carries monitoring=enabled and a port named http.
+  # The Prometheus "job" label becomes the Service name, which the Grafana dashboard expects.
   selector:
     matchLabels:
-      app: gateway   
+      monitoring: enabled
   endpoints:
     - port: http
       path: /metrics

@@ -73,11 +73,15 @@ kind: Service
 metadata:
   name: product-service
   namespace: ecommerce
+  labels:
+    app: product-service
+    monitoring: enabled
 spec:
   selector:
     app: product-service
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 3003
       targetPort: 3003
   type: ClusterIP
