@@ -65,10 +65,10 @@ Known problems with this platform, with the cause and the fix. Infrastructure-si
 
 ## CI
 
-### The workflow does not start on push
+### The workflow does not start when I push
 
-- **Cause:** the push only changed `gitops/`, `docs/` or markdown files, which `ci.yml` ignores, or it was not a push to `main`.
-- **Fix:** push a change to application code on `main`, or run the workflow from the Actions tab.
+- **Cause:** `ci.yml` runs only on `workflow_dispatch`, to save GitHub Actions minutes. A push never starts it.
+- **Fix:** run it from the Actions tab (**E-Commerce CI Pipeline → Run workflow**). The comment at the top of `ci.yml` shows how to turn the push trigger back on.
 
 ### `update-manifests` commits nothing
 

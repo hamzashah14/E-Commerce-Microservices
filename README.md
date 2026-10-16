@@ -10,7 +10,7 @@ The AWS side (VPC, EKS, ECR, Argo CD, Prometheus and Grafana) is provisioned fro
 |------|---------------------|-------|
 | Containers | One Dockerfile per service on `node:20-alpine`; multi-stage builds and a non-root user on the backend services | `backend/services/*/Dockerfile`, `frontend/Dockerfile` |
 | Local environment | Docker Compose: 7 app containers, PostgreSQL 15, Prometheus, Grafana | `docker-compose.yml` |
-| CI | GitHub Actions runs on every push to `main`, builds the 7 images in parallel and pushes them to Amazon ECR, tagged with the commit SHA | `.github/workflows/ci.yml` |
+| CI | GitHub Actions, started by hand from the Actions tab, builds the 7 images in parallel and pushes them to Amazon ECR, tagged with the commit SHA | `.github/workflows/ci.yml` |
 | GitOps | Kustomize manifests; CI bumps the image tags; Argo CD syncs `gitops/` to the cluster automatically (prune and self-heal) | `gitops/` |
 | Kubernetes | Deployments with 2 replicas, rolling updates, readiness and liveness probes, resource requests and limits and zone spread; CPU-based HPAs; ResourceQuota and LimitRange; ClusterIP Services; PostgreSQL StatefulSet on EBS (gp2); Secrets; database restore Job | `gitops/k8s/` |
 | Observability | `/metrics` on every backend service, one ServiceMonitor that scrapes all of them, Grafana dashboard shipped as a ConfigMap | `gitops/k8s/`, `prometheus/`, `grafana/` |
@@ -20,7 +20,7 @@ The AWS side (VPC, EKS, ECR, Argo CD, Prometheus and Grafana) is provisioned fro
 ## Delivery flow
 
 ```
- git push ──▶ GitHub ──(push to main)──▶ GitHub Actions ──▶ build 7 images ──▶ Amazon ECR
+ git push ──▶ GitHub ──(run workflow)──▶ GitHub Actions ──▶ build 7 images ──▶ Amazon ECR
                 ▲                              │
                 └── commit new image tags ◀────┘
                 │
@@ -29,7 +29,7 @@ The AWS side (VPC, EKS, ECR, Argo CD, Prometheus and Grafana) is provisioned fro
                          Prometheus ◀── /metrics ──┘ ──▶ Grafana dashboard
 ```
 
-The workflow runs on every push to `main` that changes application code, and can also be started by hand. See [CI/CD](#cicd).
+The workflow is started by hand (Actions tab, Run workflow), so it does not use Actions minutes on every push. See [CI/CD](#cicd).
 
 ## The workload
 
@@ -90,7 +90,7 @@ docker compose down        # stop; add -v to also delete the database volume
 Provision the cluster with [E-Commerce-Infrastructure](https://github.com/hamzashah14/E-Commerce-Infrastructure), then follow the [deployment guide](docs/deployment-guide.md). Short version:
 
 1. Replace the `<AWS_ACCOUNT_ID>` placeholder in `gitops/k8s/**` with your account ID and push.
-2. Add the four GitHub Actions secrets. Every push to `main` then runs the **E-Commerce CI Pipeline** (or start it from the Actions tab).
+2. Add the four GitHub Actions secrets. Then start the **E-Commerce CI Pipeline** from the Actions tab (Run workflow).
 3. Register the Argo CD application: `kubectl apply -f gitops/argo-cd.yml -n argocd`. It syncs on its own from then on.
 
 The HorizontalPodAutoscalers need metrics-server in the cluster; the Terraform in E-Commerce-Infrastructure installs it.
@@ -105,7 +105,7 @@ The HorizontalPodAutoscalers need metrics-server in the cluster; the Terraform i
 
 Required repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_ACCOUNT_ID`.
 
-The workflow runs on every push to `main` and on `workflow_dispatch`. Changes under `gitops/`, `docs/` and markdown files are ignored, so the manifest commit made by `update-manifests` cannot start another run. Pushes made with `GITHUB_TOKEN` do not trigger workflows either, the commit carries `[skip ci]`, and a concurrency group runs one pipeline at a time. If you protect `main`, allow the workflow to push to it.
+The workflow runs only on `workflow_dispatch`: open the Actions tab, pick **E-Commerce CI Pipeline** and choose Run workflow. The comment at the top of `ci.yml` shows how to turn the push trigger back on. Pushes made with `GITHUB_TOKEN` do not trigger workflows, the manifest commit carries `[skip ci]`, and a concurrency group runs one pipeline at a time. If you protect `main`, allow the workflow to push to it.
 
 ## GitOps
 

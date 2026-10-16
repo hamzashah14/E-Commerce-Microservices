@@ -87,7 +87,7 @@ Everything is tracked — who changed what, when, and why. This is the foundatio
 
 ## Stage 3: CI Pipeline — GitHub Actions
 
-When the workflow runs, GitHub Actions builds Docker images for all 7 services in parallel and pushes them to Amazon ECR. It runs on every push to `main` (and on `workflow_dispatch`); changes under `gitops/`, `docs/` and markdown are ignored so the manifest commit cannot start another run.
+When the workflow runs, GitHub Actions builds Docker images for all 7 services in parallel and pushes them to Amazon ECR. It is started by hand from the Actions tab (`workflow_dispatch`) so it does not use Actions minutes on every push; the comment at the top of `ci.yml` shows how to turn the push trigger back on.
 
 ```mermaid
 flowchart TD
@@ -158,7 +158,7 @@ sequenceDiagram
     participant EKS as EKS Cluster
 
     Dev->>GH: git push
-    GH->>CI: trigger pipeline
+    Dev->>CI: Run workflow (Actions tab)
     CI->>ECR: docker push (new image)
     CI->>GH: commit updated image tag
     Argo->>GH: polls every 3 mins / webhook
