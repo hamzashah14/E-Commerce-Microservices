@@ -12,8 +12,8 @@ Known problems with this platform, with the cause and the fix. Infrastructure-si
 
 ### Argo CD shows `OutOfSync` but nothing deploys
 
-- **Cause:** `syncPolicy` in `gitops/argo-cd.yml` is `{}`, which means manual sync.
-- **Fix:** press **Sync** in the UI, or enable the `automated` policy with `prune` and `selfHeal`.
+- **Cause:** the Application in the cluster was registered from an older copy of `gitops/argo-cd.yml` (manual sync), or Argo CD cannot read the repository (it must be public or have credentials).
+- **Fix:** apply the current file with `kubectl apply -f gitops/argo-cd.yml -n argocd` (automated sync with `prune` and `selfHeal`), and check the repository connection in the Argo CD UI.
 
 ### Argo CD UI does not load over HTTPS
 
@@ -34,7 +34,17 @@ Known problems with this platform, with the cause and the fix. Infrastructure-si
 
 - **Symptom:** cluster and node metrics appear, application metrics do not, although they work under Docker Compose.
 - **Cause:** kube-prometheus-stack only scrapes targets described by a `ServiceMonitor` with the label `release: kube-prometheus-stack`, and the target Service must have a named port that the monitor references (`http`).
-- **Fix:** `gitops/k8s/backend/service-monitor.yml` selects the Service labelled `app: gateway`, port `http`, path `/metrics`. The gateway Service names its port `http`. Add the same pattern for other services you want scraped.
+- **Fix:** `gitops/k8s/backend/service-monitor.yml` selects every Service labelled `monitoring: enabled`, port `http`, path `/metrics`. All six backend Services carry the label and name their port `http`. Give a new service's Service the same label and port name to have it scraped.
+
+### An HPA shows `<unknown>` for its CPU target
+
+- **Cause:** metrics-server is not installed (the HPA has nothing to read), or the pods have no CPU requests.
+- **Fix:** install metrics-server (the E-Commerce-Infrastructure Terraform does this) and check `kubectl top pods -n ecommerce`. Every app container in `gitops/k8s/` defines `resources.requests.cpu`.
+
+### New pods are rejected with `exceeded quota`
+
+- **Cause:** the `ecommerce` ResourceQuota (`gitops/k8s/guardrails.yml`) is smaller than the new HPA limits or resource requests need.
+- **Fix:** recompute the worst case (all HPAs at their maximum plus one surge pod per Deployment) and raise the quota.
 
 ## Docker Compose
 
@@ -57,8 +67,8 @@ Known problems with this platform, with the cause and the fix. Infrastructure-si
 
 ### The workflow does not start on push
 
-- **Cause:** `ci.yml` is triggered by `workflow_dispatch` only.
-- **Fix:** run it from the Actions tab, or change the trigger to `push` on `main` (see the README).
+- **Cause:** the push only changed `gitops/`, `docs/` or markdown files, which `ci.yml` ignores, or it was not a push to `main`.
+- **Fix:** push a change to application code on `main`, or run the workflow from the Actions tab.
 
 ### `update-manifests` commits nothing
 
