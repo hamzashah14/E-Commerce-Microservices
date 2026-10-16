@@ -94,7 +94,7 @@ The region `us-east-1` is hardcoded in the manifest image references; change it 
 | `AWS_REGION` | `us-east-1` or your region |
 | `AWS_ACCOUNT_ID` | 12-digit account ID |
 
-3. Push to `main`, or open **Actions → E-Commerce CI Pipeline → Run workflow**. The workflow runs on every push to `main` that touches application code (changes under `gitops/`, `docs/` and markdown are ignored) and on `workflow_dispatch`.
+3. Open **Actions → E-Commerce CI Pipeline → Run workflow**. The workflow runs only on `workflow_dispatch`, so a push does not start it.
    - `build-and-push` runs seven matrix jobs, one per image.
    - `update-manifests` rewrites the image tags in `gitops/k8s/` and commits `ci: update image tags to <sha> [skip ci]`.
 4. Check the images:

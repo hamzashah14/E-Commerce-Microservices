@@ -1,13 +1,11 @@
 name: E-Commerce CI Pipeline
 
 on:
-  push:
-    branches: [main]
-    # The update-manifests job commits to gitops/, so ignore those paths to be safe.
-    paths-ignore:
-      - 'gitops/**'
-      - 'docs/**'
-      - '**.md'
+  # Manual only, to save GitHub Actions minutes: Actions tab -> Run workflow.
+  # To run on every push to main again, add this under `on:`
+  #   push:
+  #     branches: [main]
+  #     paths-ignore: ['gitops/**', 'docs/**', '**.md']   # update-manifests commits to gitops/
   workflow_dispatch:
 
 # One run at a time, so two quick pushes cannot race to commit the manifests.
