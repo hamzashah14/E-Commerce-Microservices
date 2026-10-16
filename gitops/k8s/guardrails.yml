@@ -1,0 +1,40 @@
+# Namespace guardrails. Sized for the worst case: every HPA at its maximum while one extra
+# pod per Deployment is up during a rolling update (40 pods, 3.8 CPU / 4800Mi requested,
+# 18.75 CPU / 19200Mi limits). Re-check these numbers when HPA limits or resources change.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ecommerce-quota
+  namespace: ecommerce
+spec:
+  hard:
+    pods: "50"
+    requests.cpu: "4"
+    requests.memory: 6Gi
+    limits.cpu: "20"
+    limits.memory: 20Gi
+    persistentvolumeclaims: "2"
+    requests.storage: 20Gi
+---
+# Defaults for containers that declare nothing (for example the database restore Job).
+# Without them the quota above would reject such pods.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ecommerce-defaults
+  namespace: ecommerce
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      default:
+        cpu: 500m
+        memory: 512Mi
+      min:
+        cpu: 10m
+        memory: 16Mi
+      max:
+        cpu: "2"
+        memory: 2Gi

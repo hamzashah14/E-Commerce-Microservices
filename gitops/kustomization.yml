@@ -5,6 +5,7 @@ namespace: ecommerce
 
 resources:
   - namespace.yml
+  - k8s/guardrails.yml
   - secrets.yml
   - k8s/database/statefulset.yml
   - k8s/database/service.yml
