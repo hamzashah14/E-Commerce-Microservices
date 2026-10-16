@@ -5,6 +5,7 @@ namespace: ecommerce
 
 resources:
   - namespace.yml
+  - k8s/guardrails.yml
   - secrets.yml
   - k8s/database/statefulset.yml
   - k8s/database/service.yml
@@ -16,6 +17,7 @@ resources:
   - k8s/backend/orders.yml
   - k8s/backend/user-service.yml
   - k8s/frontend/deployment.yml
+  - k8s/autoscaling/hpa.yml
   - k8s/grafana-dashboard.yml
 
 configMapGenerator:

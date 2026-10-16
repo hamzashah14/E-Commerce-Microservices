@@ -94,9 +94,9 @@ The region `us-east-1` is hardcoded in the manifest image references; change it 
 | `AWS_REGION` | `us-east-1` or your region |
 | `AWS_ACCOUNT_ID` | 12-digit account ID |
 
-3. Open **Actions → E-Commerce CI Pipeline → Run workflow**. The workflow is manual (`workflow_dispatch`).
+3. Push to `main`, or open **Actions → E-Commerce CI Pipeline → Run workflow**. The workflow runs on every push to `main` that touches application code (changes under `gitops/`, `docs/` and markdown are ignored) and on `workflow_dispatch`.
    - `build-and-push` runs seven matrix jobs, one per image.
-   - `update-manifests` rewrites the image tags in `gitops/k8s/` and commits `ci: update image tags to <sha>`.
+   - `update-manifests` rewrites the image tags in `gitops/k8s/` and commits `ci: update image tags to <sha> [skip ci]`.
 4. Check the images:
 
 ```bash
@@ -117,20 +117,17 @@ kubectl apply -f gitops/argo-cd.yml -n argocd
 kubectl get application -n argocd
 ```
 
-Sync is manual, so the application shows `OutOfSync` until you sync it. Open the Argo CD UI (see [Access the applications](#access-the-applications)) and press **Sync**, or apply the manifests directly:
+The application syncs automatically (`prune: true` deletes resources removed from Git, `selfHeal: true` reverts manual changes in the cluster). Watch it in the Argo CD UI (see [Access the applications](#access-the-applications)), or apply the manifests directly for a first test:
 
 ```bash
 kubectl apply -k gitops/
 ```
 
-To make Argo CD sync on its own, replace `syncPolicy: {}` in `gitops/argo-cd.yml` with:
+`ignoreDifferences` on Deployment `/spec/replicas` (with `RespectIgnoreDifferences=true`) keeps Argo CD from resetting the replica count chosen by the HPAs.
 
-```yaml
-syncPolicy:
-  automated:
-    prune: true        # delete resources removed from Git
-    selfHeal: true     # revert manual changes in the cluster
-```
+The HorizontalPodAutoscalers need metrics-server. The Terraform in E-Commerce-Infrastructure installs it; check with `kubectl top pods -n ecommerce` and `kubectl get hpa -n ecommerce` (targets should show a percentage, not `<unknown>`).
+
+The `ecommerce` namespace has a ResourceQuota and a LimitRange (`gitops/k8s/guardrails.yml`). The quota is sized for all HPAs at their maximum plus rolling-update surge; update it when you change replica limits or resources.
 
 Check the pods (the database pod takes a little longer):
 
@@ -185,7 +182,7 @@ Two details matter here:
 
 ### Prometheus
 
-kube-prometheus-stack discovers scrape targets through `ServiceMonitor` objects carrying the label `release: kube-prometheus-stack`. `gitops/k8s/backend/service-monitor.yml` selects the Service labelled `app: gateway`, port `http`, path `/metrics`, every 15 seconds. It targets the gateway only; add further Services (or label selectors) to cover the other backends.
+kube-prometheus-stack discovers scrape targets through `ServiceMonitor` objects carrying the label `release: kube-prometheus-stack`. `gitops/k8s/backend/service-monitor.yml` selects every Service labelled `monitoring: enabled`, port `http`, path `/metrics`, every 15 seconds. All six backend Services (gateway, auth, product-service, order-service, orders, user-service) carry that label and a port named `http`. To scrape a new service, give its Service the same label and port name.
 
 Useful queries:
 

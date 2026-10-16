@@ -10,26 +10,26 @@ The AWS side (VPC, EKS, ECR, Argo CD, Prometheus and Grafana) is provisioned fro
 |------|---------------------|-------|
 | Containers | One Dockerfile per service on `node:20-alpine`; multi-stage builds and a non-root user on the backend services | `backend/services/*/Dockerfile`, `frontend/Dockerfile` |
 | Local environment | Docker Compose: 7 app containers, PostgreSQL 15, Prometheus, Grafana | `docker-compose.yml` |
-| CI | GitHub Actions builds the 7 images in parallel and pushes them to Amazon ECR, tagged with the commit SHA | `.github/workflows/ci.yml` |
-| GitOps | Kustomize manifests; CI bumps the image tags; Argo CD syncs `gitops/` to the cluster | `gitops/` |
-| Kubernetes | Deployments and ClusterIP Services, PostgreSQL StatefulSet on EBS (gp2), Secrets, database restore Job | `gitops/k8s/` |
-| Observability | `/metrics` on every backend service, ServiceMonitor, Grafana dashboard shipped as a ConfigMap | `gitops/k8s/`, `prometheus/`, `grafana/` |
+| CI | GitHub Actions runs on every push to `main`, builds the 7 images in parallel and pushes them to Amazon ECR, tagged with the commit SHA | `.github/workflows/ci.yml` |
+| GitOps | Kustomize manifests; CI bumps the image tags; Argo CD syncs `gitops/` to the cluster automatically (prune and self-heal) | `gitops/` |
+| Kubernetes | Deployments with 2 replicas, rolling updates, readiness and liveness probes, resource requests and limits and zone spread; CPU-based HPAs; ResourceQuota and LimitRange; ClusterIP Services; PostgreSQL StatefulSet on EBS (gp2); Secrets; database restore Job | `gitops/k8s/` |
+| Observability | `/metrics` on every backend service, one ServiceMonitor that scrapes all of them, Grafana dashboard shipped as a ConfigMap | `gitops/k8s/`, `prometheus/`, `grafana/` |
 | Infrastructure as code | Terraform: VPC, EKS 1.34, ECR, Argo CD and kube-prometheus-stack via Helm | [E-Commerce-Infrastructure](https://github.com/hamzashah14/E-Commerce-Infrastructure) |
 | AI-assisted operations | Claude Code with project rules and AWS MCP servers | `CLAUDE.md`, [docs/claude-setup.md](docs/claude-setup.md) |
 
 ## Delivery flow
 
 ```
- git push ──▶ GitHub ──(run workflow)──▶ GitHub Actions ──▶ build 7 images ──▶ Amazon ECR
+ git push ──▶ GitHub ──(push to main)──▶ GitHub Actions ──▶ build 7 images ──▶ Amazon ECR
                 ▲                              │
                 └── commit new image tags ◀────┘
                 │
-        Argo CD watches gitops/ ──(sync)──▶ EKS, namespace "ecommerce"
+        Argo CD watches gitops/ ──(auto-sync)──▶ EKS, namespace "ecommerce"
                                                │
                          Prometheus ◀── /metrics ──┘ ──▶ Grafana dashboard
 ```
 
-The workflow is triggered manually. See [CI/CD](#cicd) to switch it to run on every push.
+The workflow runs on every push to `main` that changes application code, and can also be started by hand. See [CI/CD](#cicd).
 
 ## The workload
 
@@ -90,8 +90,10 @@ docker compose down        # stop; add -v to also delete the database volume
 Provision the cluster with [E-Commerce-Infrastructure](https://github.com/hamzashah14/E-Commerce-Infrastructure), then follow the [deployment guide](docs/deployment-guide.md). Short version:
 
 1. Replace the `<AWS_ACCOUNT_ID>` placeholder in `gitops/k8s/**` with your account ID and push.
-2. Add the four GitHub Actions secrets and run the **E-Commerce CI Pipeline** workflow.
-3. Register the Argo CD application: `kubectl apply -f gitops/argo-cd.yml -n argocd`, then sync it.
+2. Add the four GitHub Actions secrets. Every push to `main` then runs the **E-Commerce CI Pipeline** (or start it from the Actions tab).
+3. Register the Argo CD application: `kubectl apply -f gitops/argo-cd.yml -n argocd`. It syncs on its own from then on.
+
+The HorizontalPodAutoscalers need metrics-server in the cluster; the Terraform in E-Commerce-Infrastructure installs it.
 4. Load the sample data with the restore Job: `kubectl apply -f gitops/k8s/database/restore-job.yml`.
 
 ## CI/CD
@@ -99,34 +101,26 @@ Provision the cluster with [E-Commerce-Infrastructure](https://github.com/hamzas
 `.github/workflows/ci.yml` has two jobs:
 
 1. **build-and-push**: a matrix over `auth`, `gateway`, `orders`, `order-service`, `product-service`, `user-service` and `frontend`. Each entry builds its Dockerfile and pushes `<account>.dkr.ecr.<region>.amazonaws.com/<service>:<commit-sha>`.
-2. **update-manifests**: rewrites the image tags in `gitops/k8s/backend/*.yml` and `gitops/k8s/frontend/deployment.yml`, then commits `ci: update image tags to <sha>` back to the branch.
+2. **update-manifests**: rewrites the image tags in `gitops/k8s/backend/*.yml` and `gitops/k8s/frontend/deployment.yml`, then commits `ci: update image tags to <sha> [skip ci]` back to the branch.
 
 Required repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_ACCOUNT_ID`.
 
-The trigger is `workflow_dispatch` (manual). To run on every push to `main`, change the `on:` block:
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-```
+The workflow runs on every push to `main` and on `workflow_dispatch`. Changes under `gitops/`, `docs/` and markdown files are ignored, so the manifest commit made by `update-manifests` cannot start another run. Pushes made with `GITHUB_TOKEN` do not trigger workflows either, the commit carries `[skip ci]`, and a concurrency group runs one pipeline at a time. If you protect `main`, allow the workflow to push to it.
 
 ## GitOps
 
-`gitops/kustomization.yml` is the entry point and sets the `ecommerce` namespace. `gitops/argo-cd.yml` defines the Argo CD Application: repository this repo, branch `main`, path `gitops`, destination namespace `ecommerce`. Sync is manual. To let Argo CD apply and self-heal automatically:
-
-```yaml
-syncPolicy:
-  automated:
-    prune: true
-    selfHeal: true
-```
+`gitops/kustomization.yml` is the entry point and sets the `ecommerce` namespace. `gitops/argo-cd.yml` defines the Argo CD Application: repository this repo, branch `main`, path `gitops`, destination namespace `ecommerce`. Sync is automatic with `prune` and `selfHeal`: every change that lands on `main` is applied, resources removed from Git are deleted, and manual changes in the cluster are reverted. `ignoreDifferences` on `/spec/replicas` (with `RespectIgnoreDifferences`) lets the HPAs own the replica count without Argo CD resetting it.
 
 ## Observability
 
 - **Compose:** `prometheus/prometheus.yml` scrapes Prometheus itself and all six backend services (gateway included); Grafana is provisioned with Prometheus as its default data source.
-- **EKS:** kube-prometheus-stack (installed by Terraform) in the `monitoring` namespace. `gitops/k8s/backend/service-monitor.yml` scrapes `/metrics` every 15 seconds. `gitops/k8s/grafana-dashboard.yml` carries the **E-Commerce Microservices** dashboard; the label `grafana_dashboard: "1"` makes the Grafana sidecar import it.
+- **EKS:** kube-prometheus-stack (installed by Terraform) in the `monitoring` namespace. `gitops/k8s/backend/service-monitor.yml` selects every Service labelled `monitoring: enabled` (all six backends, port `http`) and scrapes `/metrics` every 15 seconds. `gitops/k8s/grafana-dashboard.yml` carries the **E-Commerce Microservices** dashboard; the label `grafana_dashboard: "1"` makes the Grafana sidecar import it.
+
+## Scaling and guardrails
+
+- **Autoscaling:** one `autoscaling/v2` HPA per Deployment in `gitops/k8s/autoscaling/hpa.yml`, target 70% CPU utilization of the request. Frontend and gateway scale between 2 and 6 replicas, the other five services between 2 and 4. HPAs need metrics-server (installed by the infrastructure repo).
+- **Availability:** two replicas per Deployment, `maxUnavailable: 0` rolling updates, readiness and liveness probes (`/health`, or `/` for the frontend) and topology spread over zones and nodes (`ScheduleAnyway`, so a small cluster still schedules).
+- **Guardrails:** `gitops/k8s/guardrails.yml` holds a ResourceQuota and a LimitRange for the `ecommerce` namespace. The quota is sized for every HPA at its maximum plus one surge pod per Deployment (40 pods, 3.8 CPU and 4800Mi requested); re-check it when you change HPA limits or resources.
 
 ## Repository structure
 
@@ -164,11 +158,10 @@ syncPolicy:
 
 ## Known limitations
 
-This is a learning project, not a production system.
+This is a demo-scale platform, not a hardened production system.
 
-- Argo CD sync is manual (`syncPolicy: {}`).
-- Every Deployment runs one replica, with no liveness or readiness probes and no resource requests or limits. There is no HPA or PodDisruptionBudget.
-- The ServiceMonitor selects only the `gateway` Service, so in the cluster Prometheus scrapes the gateway only. Compose scrapes all services.
+- There are no PodDisruptionBudgets, and the HPAs scale on CPU only.
+- PostgreSQL is a single-replica StatefulSet, so the database is not highly available.
 - Demo credentials are committed (`postgres123` in `gitops/secrets.yml` and `docker-compose.yml`, Grafana `admin` / `admin`). Use a secrets manager for anything real.
 - CI authenticates to AWS with long-lived IAM access keys instead of GitHub OIDC.
 - In `docker-compose.yml` the gateway also gets `ORDER_SERVICE_URL` and `PORT`, which it does not read (it uses `ORDERS_SERVICE_URL` and `GATEWAY_PORT`). `PORT` is harmless because the default is the same 3001; `ORDER_SERVICE_URL` has no effect because `order-service` is not routed by the gateway.

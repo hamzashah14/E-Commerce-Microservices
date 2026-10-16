@@ -79,7 +79,7 @@ gitGraph
 2. Makes changes, commits with clear messages
 3. Opens a Pull Request on GitHub
 4. PR is reviewed and merged into `main`
-5. Run the CI pipeline from the Actions tab (the workflow is manual; it can be switched to run on every push to `main`)
+5. The merge to `main` starts the CI pipeline automatically (it can also be started from the Actions tab)
 
 Everything is tracked — who changed what, when, and why. This is the foundation of GitOps.
 
@@ -87,7 +87,7 @@ Everything is tracked — who changed what, when, and why. This is the foundatio
 
 ## Stage 3: CI Pipeline — GitHub Actions
 
-When the workflow runs, GitHub Actions builds Docker images for all 7 services in parallel and pushes them to Amazon ECR. The trigger is `workflow_dispatch` (manual); `on: push: branches: [main]` makes it run on every push.
+When the workflow runs, GitHub Actions builds Docker images for all 7 services in parallel and pushes them to Amazon ECR. It runs on every push to `main` (and on `workflow_dispatch`); changes under `gitops/`, `docs/` and markdown are ignored so the manifest commit cannot start another run.
 
 ```mermaid
 flowchart TD
@@ -110,7 +110,7 @@ flowchart TD
 - Each service is a separate matrix job — they all build in parallel
 - Images are tagged with the commit SHA for full traceability
 - The `update-manifests` job patches the image tag in every Kubernetes manifest and commits the change back
-- Argo CD detects this commit; with the manual sync policy you then press Sync to roll it out
+- Argo CD detects this commit and rolls it out automatically (automated sync with prune and self-heal)
 
 **Where to check:** GitHub repo → **Actions** tab → **E-Commerce CI Pipeline**
 
@@ -170,7 +170,7 @@ sequenceDiagram
 **What ArgoCD does:**
 - Continuously compares the desired state in Git against the live state in the cluster
 - If they differ, it syncs — applying only what changed
-- With `selfHeal` enabled, a manual change in the cluster is reverted to match Git (the sync policy in this repo is manual)
+- With `selfHeal` enabled, a manual change in the cluster is reverted to match Git (this repo enables automated sync, prune and self-heal)
 - Every deployment is auditable — it's just a Git commit
 
 **Key files:**

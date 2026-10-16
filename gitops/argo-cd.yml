@@ -12,8 +12,15 @@ spec:
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: ecommerce
-  syncPolicy: {}
-  # syncPolicy:
-  #   automated:
-  #     prune: true
-  #     selfHeal: true
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Let the HPA own spec.replicas (see ignoreDifferences below).
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

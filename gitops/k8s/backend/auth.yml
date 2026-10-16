@@ -4,7 +4,12 @@ metadata:
   name: auth
   namespace: ecommerce
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: auth
@@ -13,11 +18,43 @@ spec:
       labels:
         app: auth
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: auth
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: auth
       containers:
         - name: auth
           image: <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/auth:1ebec3729cd10fe1eeac6f0858fba58e2da07956
           ports:
             - containerPort: 3002
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           env:
             - name: NODE_ENV
               value: development
@@ -36,11 +73,15 @@ kind: Service
 metadata:
   name: auth
   namespace: ecommerce
+  labels:
+    app: auth
+    monitoring: enabled
 spec:
   selector:
     app: auth
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 3002
       targetPort: 3002
   type: ClusterIP

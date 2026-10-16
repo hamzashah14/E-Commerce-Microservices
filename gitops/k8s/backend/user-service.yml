@@ -4,7 +4,12 @@ metadata:
   name: user-service
   namespace: ecommerce
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: user-service
@@ -13,11 +18,43 @@ spec:
       labels:
         app: user-service
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: user-service
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: user-service
       containers:
         - name: user-service
           image: <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/user-service:1ebec3729cd10fe1eeac6f0858fba58e2da07956
           ports:
             - containerPort: 3006
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           env:
             - name: NODE_ENV
               value: development
@@ -36,11 +73,15 @@ kind: Service
 metadata:
   name: user-service
   namespace: ecommerce
+  labels:
+    app: user-service
+    monitoring: enabled
 spec:
   selector:
     app: user-service
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 3006
       targetPort: 3006
   type: ClusterIP
